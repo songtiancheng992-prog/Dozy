@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>懒羊羊</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header id="titlebar" data-tauri-drag-region>
+      <img class="logo" data-tauri-drag-region src="mascot.png" alt="懒羊羊" />
+      <div class="title" data-tauri-drag-region>懒羊羊</div>
+      <div class="tb-actions">
+        <div class="tb-btn" id="btn-shot" title="截图">✂</div>
+        <div class="tb-btn" id="btn-min" title="最小化为玩偶">—</div>
+      </div>
+    </header>
+
+    <nav id="tabs">
+      <div class="tab active" data-v="chat">对话</div>
+      <div class="tab" data-v="translate">翻译</div>
+      <div class="tab" data-v="clipboard">剪贴板</div>
+      <div class="tab" data-v="todo">待办</div>
+      <div class="tab" data-v="set">设置</div>
+    </nav>
+
+    <main id="body">
+      <!-- 对话 -->
+      <section class="view" data-view="chat">
+        <div class="sess-bar">
+          <select id="sess-select" title="会话"></select>
+          <div class="mini-btn" id="btn-new-sess" title="新建会话">＋</div>
+          <div class="mini-btn" id="btn-del-sess" title="删除当前会话">🗑</div>
+        </div>
+        <div id="chat-log" class="chat-log"></div>
+        <div class="composer">
+          <textarea id="chat-input" class="ta" placeholder="输入问题，Enter 发送 / Shift+Enter 换行…"></textarea>
+          <div class="composer-row">
+            <span class="chip" id="chat-status">就绪</span>
+            <button class="btn" id="btn-send">发送</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 翻译 -->
+      <section class="view" data-view="translate">
+        <div class="tr-block">
+          <div class="tr-lbl">原文（粘贴即自动翻译）</div>
+          <textarea id="tr-input" class="ta grow" placeholder="在此粘贴或输入文字…"></textarea>
+        </div>
+        <div class="tr-block">
+          <div class="tr-lbl">译文 · 自动中英互译</div>
+          <div id="tr-output" class="tr-out"></div>
+        </div>
+        <div class="composer-row">
+          <span class="chip" id="tr-status">就绪</span>
+          <div class="rowbtns">
+            <button class="btn ghost" id="tr-copy">复制</button>
+            <button class="btn" id="tr-tochat">送入对话</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 剪贴板 -->
+      <section class="view" data-view="clipboard">
+        <div class="tr-lbl">剪贴板历史 · 保留最近 30 条</div>
+        <div id="clip-list" class="clip-list"></div>
+        <div class="composer-row">
+          <span class="chip">单击=展开详情并复制 · 再单击收回 · 详情内可删除</span>
+          <button class="btn ghost" id="clip-clear">清空</button>
+        </div>
+      </section>
+
+      <!-- 待办 -->
+      <section class="view" data-view="todo">
+        <div class="todo-input-row">
+          <input id="todo-input" class="inp" placeholder="添加待办，回车确认…" />
+          <button class="btn" id="todo-add">添加</button>
+        </div>
+        <div id="todo-list" class="todo-list"></div>
+        <div class="composer-row">
+          <span class="chip">点击圆圈勾选完成 · 🗑 删除</span>
+        </div>
+      </section>
+
+      <!-- 设置 -->
+      <section class="view" data-view="set">
+        <div class="set-scroll">
+          <div class="set-sec">
+            <div class="set-h">模型接口（OpenAI 兼容）</div>
+            <div class="field"><label>Base URL</label><input id="cfg-url" class="inp" /></div>
+            <div class="field"><label>API Key</label><input id="cfg-key" class="inp" type="password" placeholder="sk-..." /></div>
+            <div class="field"><label>模型名称</label><input id="cfg-model" class="inp" /></div>
+          </div>
+
+          <div class="set-sec">
+            <div class="set-h">快捷键（可自由输入：单键或组合键）</div>
+            <div class="field"><label>窗口 / 玩偶 切换</label><input id="hk-toggle" class="inp hk" placeholder="如 A / 5 / Ctrl+Q / Alt+T" /></div>
+            <div class="field"><label>快速提问（展开并聚焦输入框）</label><input id="hk-chat" class="inp hk" placeholder="如 A / 5 / Ctrl+Q / Alt+T" /></div>
+            <div class="field"><label>直达翻译页</label><input id="hk-translate" class="inp hk" placeholder="如 A / 5 / Ctrl+Q / Alt+T" /></div>
+            <div class="field"><label>直达剪贴板页</label><input id="hk-clipboard" class="inp hk" placeholder="如 A / 5 / Ctrl+Q / Alt+T" /></div>
+            <div class="field"><label>直达待办页</label><input id="hk-todo" class="inp hk" placeholder="如 1 / A / Ctrl+Q / Alt+T" /></div>
+            <div class="hint">格式：<b>单键</b>直接填一个键（如 1、A、F1）；<b>组合键</b>为 修饰键+按键（如 Ctrl+1、Alt+Q、Shift+F1）。注意：像「1+1」这样两个主按键的组合系统不支持——数字/字母本身完全可用，组合时前面加修饰键即可。留空=不启用。</div>
+            <div class="hint hk-err" id="hk-error"></div>
+          </div>
+
+          <div class="set-sec">
+            <div class="set-h">通用</div>
+            <div class="toggle-row"><span>开机自启</span><div class="sw" id="sw-autostart"><i></i></div></div>
+            <div class="toggle-row"><span>失焦自动收成玩偶</span><div class="sw" id="sw-collapse"><i></i></div></div>
+            <div class="toggle-row"><span>剪贴板记录</span><div class="sw" id="sw-clip"><i></i></div></div>
+            <div class="toggle-row"><span>玩偶时挂起省内存</span><div class="sw" id="sw-suspend"><i></i></div></div>
+          </div>
+
+          <div class="set-sec">
+            <div class="rowbtns full">
+              <button class="btn ghost" id="btn-quit">退出程序</button>
+              <button class="btn" id="btn-save">保存设置</button>
+            </div>
+            <div class="hint">数据全部本地存储（exe 同目录的 config.json / lazygoat.db），不上云。</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 玩偶浮窗（最小化形态）：单击展开，按住拖动 -->
+  <div id="pet" title="单击展开懒羊羊 · 按住可拖动">
+    <img id="pet-img" src="mascot.png" draggable="false" alt="懒羊羊" />
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>

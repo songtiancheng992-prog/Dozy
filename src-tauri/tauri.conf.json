@@ -1,0 +1,53 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "懒羊羊",
+  "version": "0.1.0",
+  "identifier": "com.lazygoat.float",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "懒羊羊",
+        "width": 360,
+        "height": 600,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": false,
+        "skipTaskbar": true,
+        "center": true,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "lazy-goat",
+    "category": "Productivity",
+    "shortDescription": "懒羊羊 - 轻量桌面 AI 浮窗",
+    "longDescription": "懒羊羊是一个轻量的桌面 AI 浮窗，支持对话、快捷翻译与剪贴板记录，可自由接入 OpenAI 兼容的大模型接口。",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false,
+        "languages": ["SimpChinese"]
+      }
+    }
+  }
+}

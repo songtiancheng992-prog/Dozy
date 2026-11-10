@@ -1,0 +1,12 @@
+{
+  "name": "lazy-goat",
+  "version": "0.1.0",
+  "private": true,
+  "description": "懒羊羊 - 轻量桌面 AI 浮窗",
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

@@ -1,0 +1,16 @@
+# 构建产物 / 依赖
+node_modules/
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# 运行时本地数据（便携模式生成，不入库）
+*.db
+config.json
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 个人本地部署/测试脚本（含本机路径，不入库）
+deploy*.ps1
+retest*.ps1
