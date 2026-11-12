@@ -14,3 +14,4 @@ Thumbs.db
 # 个人本地部署/测试脚本（含本机路径，不入库）
 deploy*.ps1
 retest*.ps1
+hktest*.ps1
