@@ -17,6 +17,14 @@ pub struct AppConfig {
     pub hk_clipboard: String,
     pub hk_todo: String,
     pub auto_collapse: bool,
+    /// 人设描述（注入每次对话的 system prompt）
+    pub persona: String,
+    /// 全局指令（注入每次对话的 system prompt）
+    pub instructions: String,
+    /// 自动记忆开关：每轮对话后总结要点存入本地记忆，并注入后续对话
+    pub memory_enabled: bool,
+    /// 窗口放大状态（大窗 / 小窗）
+    pub expanded: bool,
 }
 
 impl Default for AppConfig {
@@ -34,6 +42,10 @@ impl Default for AppConfig {
             hk_clipboard: "Alt+C".into(),
             hk_todo: "Alt+D".into(),
             auto_collapse: true,
+            persona: String::new(),
+            instructions: String::new(),
+            memory_enabled: false,
+            expanded: false,
         }
     }
 }

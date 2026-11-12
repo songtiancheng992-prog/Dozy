@@ -56,7 +56,8 @@ html, body {
   filter: drop-shadow(0 1px 2px rgba(0,0,0,.4));
   pointer-events: none;
 }
-.title { font-weight: 600; font-size: 13px; flex: 1; letter-spacing: .5px; }
+.title { font-weight: 600; font-size: 13px; flex: 0 0 auto; letter-spacing: .5px; }
+.tb-spacer { flex: 1; }
 .tb-actions { display: flex; gap: 4px; }
 .tb-btn {
   width: 24px; height: 24px; border-radius: 7px;
@@ -65,6 +66,7 @@ html, body {
 }
 .tb-btn:hover { background: var(--panel-2); color: var(--text); }
 .tb-btn.on { color: var(--accent-2); }
+.tb-btn.rec { color: #ff6b6b; background: rgba(255,107,107,.16); }
 
 /* 标签 */
 #tabs {
@@ -184,6 +186,14 @@ html, body {
 }
 
 /* 设置 */
+.set-back-row { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.set-ta { min-height: 64px; max-height: 160px; }
+.mem-field { margin-top: 10px; }
+.mem-view {
+  background: var(--panel); border: 1px solid var(--border-soft); border-radius: 8px;
+  padding: 8px 10px; font-size: 11px; color: var(--text-2); line-height: 1.6;
+  max-height: 120px; overflow-y: auto; white-space: pre-wrap; user-select: text;
+}
 .set-scroll { flex: 1; overflow-y: auto; padding-right: 2px; }
 .set-sec { margin-bottom: 16px; }
 .set-h { font-size: 11px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 9px; }
@@ -235,3 +245,75 @@ body.pet-mode #pet { display: flex; }
   height: 94%; max-width: 94%; object-fit: contain; pointer-events: none;
   filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.55));
 }
+
+/* 计算器 */
+.calc-modes { display: flex; gap: 6px; flex-shrink: 0; }
+.calc-mode {
+  padding: 5px 14px; border-radius: 8px; font-size: 12px; cursor: pointer;
+  color: var(--text-2); background: var(--panel); border: 1px solid var(--border-soft);
+}
+.calc-mode.active { background: var(--accent-soft); color: var(--accent-2); border-color: rgba(79,140,255,.25); }
+.calc-pane { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; }
+.calc-display {
+  width: 100%; background: var(--panel); border: 1px solid var(--border-soft);
+  border-radius: 9px; color: var(--text); font-size: 20px; text-align: right;
+  padding: 10px 12px; outline: none; font-family: Consolas, monospace; user-select: text;
+}
+.calc-display:focus { border-color: rgba(79,140,255,.4); }
+.calc-preview { min-height: 16px; text-align: right; font-size: 12px; color: var(--text-3); font-family: Consolas, monospace; }
+.calc-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; flex-shrink: 0; }
+.ck {
+  padding: 10px 0; text-align: center; border-radius: 9px; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--border-soft);
+  color: var(--text); font-size: 15px; font-family: Consolas, monospace;
+}
+.ck:hover { background: var(--panel-2); }
+.ck:active { background: var(--accent-soft); }
+.ck.op { color: var(--accent-2); background: var(--accent-soft); }
+.ck.fn { color: var(--text-2); font-size: 13px; }
+.ck.eq { background: var(--accent); color: #fff; border-color: transparent; }
+.ck.eq:hover { background: var(--accent-2); }
+.ck.wide { grid-column: span 4; padding: 8px 0; }
+.calc-hist-lbl { margin-top: 4px; }
+.calc-hist { flex: 1; min-height: 40px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.calc-hist-item {
+  font-size: 11px; color: var(--text-2); font-family: Consolas, monospace;
+  padding: 5px 8px; border-radius: 6px; background: var(--panel); cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.calc-hist-item:hover { background: var(--panel-2); color: var(--text); }
+
+/* 换算 */
+.conv-pane { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; overflow-y: auto; }
+.conv-row { display: flex; gap: 8px; align-items: flex-end; }
+.conv-row .field.grow { flex: 1; margin-bottom: 0; }
+.conv-swap { margin-bottom: 4px; }
+.conv-result {
+  background: var(--panel-2); border: 1px solid var(--border-soft); border-radius: 10px;
+  padding: 14px 12px; font-size: 15px; color: var(--text); text-align: center;
+  font-family: Consolas, monospace; word-break: break-all; user-select: text;
+}
+select.inp { appearance: auto; }
+select.inp option { background: var(--bg-solid); color: var(--text); }
+
+/* 大窗模式：内容同步放大、更舒展 */
+body.big .view { padding: 16px 20px; gap: 10px; }
+body.big .tab { font-size: 13px; padding: 8px 0; }
+body.big .msg { max-width: 72%; font-size: 14px; padding: 10px 14px; }
+body.big .chat-log { padding: 6px 8px; gap: 10px; }
+body.big .ta { font-size: 14px; min-height: 60px; }
+body.big .tr-out { font-size: 14px; }
+body.big [data-view="translate"] { flex-direction: row; flex-wrap: wrap; align-content: stretch; }
+body.big [data-view="translate"] .tr-block { flex: 1 1 300px; min-width: 260px; }
+body.big [data-view="translate"] .composer-row { flex-basis: 100%; }
+body.big .cb-txt, body.big .todo-txt { font-size: 13px; }
+body.big .cb-full { font-size: 13px; max-height: 320px; }
+body.big .set-scroll { max-width: 760px; width: 100%; margin: 0 auto; }
+body.big .set-ta { min-height: 84px; }
+body.big .calc-display { font-size: 26px; padding: 14px 16px; }
+body.big .ck { padding: 14px 0; font-size: 17px; }
+body.big .calc-grid { max-width: 480px; }
+body.big .conv-pane { max-width: 560px; }
+body.big .conv-result { font-size: 18px; padding: 18px; }
+body.big .inp { font-size: 13px; padding: 9px 12px; }
+body.big .btn { font-size: 13px; padding: 8px 18px; }

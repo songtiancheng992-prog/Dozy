@@ -94,6 +94,41 @@ pub async fn stream_completion(
     Ok(full)
 }
 
+/// 非流式一次性补全（用于自动记忆总结等后台小任务）
+pub async fn complete_once(
+    base_url: &str,
+    api_key: &str,
+    model: &str,
+    messages: Vec<ChatMsg>,
+) -> Result<String, String> {
+    let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+    let body = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "stream": false,
+    });
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .bearer_auth(api_key)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("网络请求失败：{}", e))?;
+    if !resp.status().is_success() {
+        return Err(format!("接口返回 {}", resp.status()));
+    }
+    let v: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    Ok(v
+        .get("choices")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("message"))
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str())
+        .unwrap_or("")
+        .to_string())
+}
+
 fn truncate(s: &str, n: usize) -> String {
     if s.chars().count() <= n {
         s.to_string()

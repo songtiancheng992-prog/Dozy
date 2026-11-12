@@ -11,8 +11,12 @@
     <header id="titlebar" data-tauri-drag-region>
       <img class="logo" data-tauri-drag-region src="mascot.png" alt="懒羊羊" />
       <div class="title" data-tauri-drag-region>懒羊羊</div>
+      <div class="tb-btn" id="btn-shot" title="截图">✂</div>
+      <div class="tb-btn" id="btn-rec" title="开始 / 停止屏幕录像">⏺</div>
+      <div class="tb-spacer" data-tauri-drag-region></div>
       <div class="tb-actions">
-        <div class="tb-btn" id="btn-shot" title="截图">✂</div>
+        <div class="tb-btn" id="btn-set" title="设置">⚙</div>
+        <div class="tb-btn" id="btn-expand" title="放大 / 还原窗口">⛶</div>
         <div class="tb-btn" id="btn-min" title="最小化为玩偶">—</div>
       </div>
     </header>
@@ -22,7 +26,7 @@
       <div class="tab" data-v="translate">翻译</div>
       <div class="tab" data-v="clipboard">剪贴板</div>
       <div class="tab" data-v="todo">待办</div>
-      <div class="tab" data-v="set">设置</div>
+      <div class="tab" data-v="calc">计算器</div>
     </nav>
 
     <main id="body">
@@ -84,14 +88,97 @@
         </div>
       </section>
 
+      <!-- 计算器 -->
+      <section class="view" data-view="calc">
+        <div class="calc-modes">
+          <div class="calc-mode active" data-cm="calc">计算</div>
+          <div class="calc-mode" data-cm="conv">换算</div>
+        </div>
+
+        <div id="calc-pane" class="calc-pane">
+          <input id="calc-expr" class="calc-display" placeholder="0" autocomplete="off" spellcheck="false" />
+          <div id="calc-preview" class="calc-preview"></div>
+          <div class="calc-grid">
+            <div class="ck fn" data-k="C">C</div>
+            <div class="ck fn" data-k="(">(</div>
+            <div class="ck fn" data-k=")">)</div>
+            <div class="ck fn" data-k="back">⌫</div>
+            <div class="ck" data-k="7">7</div>
+            <div class="ck" data-k="8">8</div>
+            <div class="ck" data-k="9">9</div>
+            <div class="ck op" data-k="/">÷</div>
+            <div class="ck" data-k="4">4</div>
+            <div class="ck" data-k="5">5</div>
+            <div class="ck" data-k="6">6</div>
+            <div class="ck op" data-k="*">×</div>
+            <div class="ck" data-k="1">1</div>
+            <div class="ck" data-k="2">2</div>
+            <div class="ck" data-k="3">3</div>
+            <div class="ck op" data-k="-">−</div>
+            <div class="ck" data-k="0">0</div>
+            <div class="ck" data-k=".">.</div>
+            <div class="ck" data-k="%">%</div>
+            <div class="ck op" data-k="+">+</div>
+            <div class="ck eq wide" data-k="=">=</div>
+          </div>
+          <div class="tr-lbl calc-hist-lbl">历史</div>
+          <div id="calc-hist" class="calc-hist"></div>
+        </div>
+
+        <div id="conv-pane" class="conv-pane" style="display:none">
+          <div class="field"><label>类别</label>
+            <select id="conv-cat" class="inp"></select>
+          </div>
+          <div class="field"><label>数值</label>
+            <input id="conv-val" class="inp" type="text" inputmode="decimal" value="1" />
+          </div>
+          <div class="conv-row">
+            <div class="field grow"><label>从</label><select id="conv-from" class="inp"></select></div>
+            <div class="mini-btn conv-swap" id="conv-swap" title="交换单位">⇄</div>
+            <div class="field grow"><label>到</label><select id="conv-to" class="inp"></select></div>
+          </div>
+          <div class="conv-result" id="conv-result">—</div>
+          <div class="composer-row">
+            <span class="chip" id="conv-note">纯本地换算，不消耗 token</span>
+            <div class="rowbtns">
+              <button class="btn ghost" id="conv-fx-refresh" style="display:none">刷新汇率</button>
+              <button class="btn ghost" id="conv-copy">复制结果</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- 设置 -->
       <section class="view" data-view="set">
+        <div class="set-back-row">
+          <div class="mini-btn" id="btn-set-back" title="返回">←</div>
+          <span class="tr-lbl">设置</span>
+        </div>
         <div class="set-scroll">
           <div class="set-sec">
             <div class="set-h">模型接口（OpenAI 兼容）</div>
             <div class="field"><label>Base URL</label><input id="cfg-url" class="inp" /></div>
             <div class="field"><label>API Key</label><input id="cfg-key" class="inp" type="password" placeholder="sk-..." /></div>
             <div class="field"><label>模型名称</label><input id="cfg-model" class="inp" /></div>
+          </div>
+
+          <div class="set-sec">
+            <div class="set-h">人格与记忆</div>
+            <div class="field"><label>人设描述（它是谁、什么性格、怎么说话）</label>
+              <textarea id="cfg-persona" class="ta set-ta" placeholder="例：你是懒羊羊，一只温柔慵懒的小羊助理，说话简洁、带一点可爱，偶尔用「～」"></textarea>
+            </div>
+            <div class="field"><label>全局指令（每次对话都必须遵守的规则）</label>
+              <textarea id="cfg-instructions" class="ta set-ta" placeholder="例：永远用中文回答；代码要带注释；不确定的事要直说"></textarea>
+            </div>
+            <div class="toggle-row"><span>自动记忆（每轮对话后总结要点，跨会话记住你）</span><div class="sw off" id="sw-memory"><i></i></div></div>
+            <div class="hint">人设与指令会注入每次对话；自动记忆开启后每轮会额外调用一次模型做总结（少量 token）。记忆只存本机 memory.txt。</div>
+            <div class="field mem-field"><label>当前长期记忆</label>
+              <div id="mem-view" class="mem-view">（暂无记忆）</div>
+            </div>
+            <div class="rowbtns">
+              <button class="btn ghost" id="btn-mem-refresh">刷新</button>
+              <button class="btn danger" id="btn-mem-clear">清空记忆</button>
+            </div>
           </div>
 
           <div class="set-sec">

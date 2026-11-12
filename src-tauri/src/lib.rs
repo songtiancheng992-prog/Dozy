@@ -6,7 +6,7 @@ mod llm;
 use config::AppConfig;
 use db::Db;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -18,10 +18,16 @@ pub struct ConfigState(pub Mutex<AppConfig>);
 pub struct ConfigDir(pub PathBuf);
 /// true = 玩偶(最小化)形态, false = 会话窗口形态
 pub struct Mode(pub AtomicBool);
+/// 最近一次展开面板的时间戳（毫秒），用于展开后短暂忽略失焦收起
+pub struct ShowStamp(pub AtomicU64);
+/// 屏幕录像状态（使用 Windows 自带 Game Bar，无需下载任何组件）
+pub struct RecFlag(pub AtomicBool);
 
 // 逻辑像素尺寸
 const PANEL_W: f64 = 360.0;
 const PANEL_H: f64 = 600.0;
+const BIG_W: f64 = 900.0;
+const BIG_H: f64 = 680.0;
 const PET_W: f64 = 88.0;
 const PET_H: f64 = 100.0;
 const EDGE_MARGIN: f64 = 6.0;
@@ -123,6 +129,42 @@ fn cfg_of(app: &AppHandle) -> AppConfig {
     g.clone()
 }
 
+/// 强制把窗口带到前台（绕过 Windows 前台锁：附加到前台线程输入队列再 SetForegroundWindow）
+#[cfg(windows)]
+fn force_foreground(w: &WebviewWindow) {
+    use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
+        ShowWindow, SW_SHOW,
+    };
+    if let Ok(hwnd) = w.hwnd() {
+        unsafe {
+            let fg = GetForegroundWindow();
+            let fg_tid = GetWindowThreadProcessId(fg, None);
+            let cur = GetCurrentThreadId();
+            let attached = fg_tid != 0 && fg_tid != cur;
+            if attached {
+                let _ = AttachThreadInput(cur, fg_tid, true);
+            }
+            let _ = ShowWindow(hwnd, SW_SHOW);
+            let _ = BringWindowToTop(hwnd);
+            let _ = SetForegroundWindow(hwnd);
+            if attached {
+                let _ = AttachThreadInput(cur, fg_tid, false);
+            }
+        }
+    }
+}
+#[cfg(not(windows))]
+fn force_foreground(_w: &WebviewWindow) {}
+
+fn now_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 /// 进入会话窗口形态
 fn enter_panel(app: &AppHandle, nav: Option<&str>, focus_input: bool) {
     let w = match main_window(app) {
@@ -130,21 +172,25 @@ fn enter_panel(app: &AppHandle, nav: Option<&str>, focus_input: bool) {
         None => return,
     };
     set_pet(app, false);
+    let expanded = cfg_of(app).expanded;
+    let (pw, ph) = if expanded { (BIG_W, BIG_H) } else { (PANEL_W, PANEL_H) };
     let (mw, _mh, scale) = monitor_info(app);
     let y = current_logical_y(&w, scale, 90.0);
-    let x = (mw - PANEL_W - EDGE_MARGIN).max(0.0);
-    let _ = w.set_size(tauri::LogicalSize::new(PANEL_W, PANEL_H));
+    let x = (mw - pw - EDGE_MARGIN).max(0.0);
+    let _ = w.set_size(tauri::LogicalSize::new(pw, ph));
     let _ = w.set_position(tauri::LogicalPosition::new(x, y.max(0.0)));
     let _ = w.set_always_on_top(false);
     let _ = w.set_skip_taskbar(true);
     set_memory_level(app, false);
     let _ = w.show();
     let _ = w.unminimize();
+    force_foreground(&w);
     let _ = w.set_focus();
+    app.state::<ShowStamp>().0.store(now_millis(), Ordering::SeqCst);
     // nav 为 None 时前端保持/恢复上次停留的模块
     let _ = w.emit(
         "mode",
-        serde_json::json!({ "mode": "panel", "nav": nav, "focusInput": focus_input }),
+        serde_json::json!({ "mode": "panel", "nav": nav, "focusInput": focus_input, "expanded": expanded }),
     );
 }
 
@@ -362,7 +408,10 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id().as_ref() {
             "show" => toggle_mode(app),
             "settings" => enter_panel(app, Some("set"), false),
-            "quit" => app.exit(0),
+            "quit" => {
+                stop_recorder(app);
+                app.exit(0);
+            }
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
@@ -443,8 +492,167 @@ fn pet_peek(app: AppHandle, out: bool) {
     do_peek(&app, out);
 }
 
+/// 切换窗口放大/还原，返回新的放大状态
+#[tauri::command]
+fn toggle_expand(app: AppHandle) -> bool {
+    let expanded = {
+        let s = app.state::<ConfigState>();
+        let mut g = s.0.lock().unwrap();
+        g.expanded = !g.expanded;
+        g.expanded
+    };
+    let dir = {
+        let d = app.state::<ConfigDir>();
+        d.0.clone()
+    };
+    cfg_of(&app).save(&dir);
+    if !is_pet(&app) {
+        if let Some(w) = main_window(&app) {
+            let (pw, ph) = if expanded { (BIG_W, BIG_H) } else { (PANEL_W, PANEL_H) };
+            let (mw, _mh, scale) = monitor_info(&app);
+            let y = current_logical_y(&w, scale, 90.0);
+            let x = (mw - pw - EDGE_MARGIN).max(0.0);
+            let _ = w.set_size(tauri::LogicalSize::new(pw, ph));
+            let _ = w.set_position(tauri::LogicalPosition::new(x, y.max(0.0)));
+        }
+    }
+    expanded
+}
+
+// ---------- 自动记忆 ----------
+
+fn memory_path(app: &AppHandle) -> PathBuf {
+    let d = app.state::<ConfigDir>();
+    d.0.join("memory.txt")
+}
+
+#[tauri::command]
+fn get_memory(app: AppHandle) -> String {
+    std::fs::read_to_string(memory_path(&app)).unwrap_or_default()
+}
+
+#[tauri::command]
+fn clear_memory(app: AppHandle) {
+    let _ = std::fs::write(memory_path(&app), "");
+}
+
+/// 组装对话的 system prompt：人设 + 全局指令 + 长期记忆
+fn build_system_prompt(cfg: &AppConfig, memory: &str) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+    if !cfg.persona.trim().is_empty() {
+        parts.push(format!("【人设】\n{}", cfg.persona.trim()));
+    }
+    if !cfg.instructions.trim().is_empty() {
+        parts.push(format!("【全局指令（必须遵守）】\n{}", cfg.instructions.trim()));
+    }
+    if cfg.memory_enabled && !memory.trim().is_empty() {
+        parts.push(format!("【关于用户的长期记忆（供参考）】\n{}", memory.trim()));
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("\n\n"))
+    }
+}
+
+/// 每轮对话后异步总结记忆（不阻塞聊天）
+fn spawn_memory_update(app: AppHandle, cfg: AppConfig, user_text: String, reply: String) {
+    tauri::async_runtime::spawn(async move {
+        let old = std::fs::read_to_string(memory_path(&app)).unwrap_or_default();
+        let sys = "你是一个记忆管理器。根据【已有记忆】和【最新对话】，输出更新后的记忆要点。\n规则：只保留长期有价值的信息（用户身份、偏好、习惯、重要决定、常用技术栈等），忽略一次性闲聊细节；用简洁的中文条目（每行一条，以 - 开头）；总长不超过300字；若没有新信息，原样输出已有记忆；只输出记忆条目本身，不要任何解释。";
+        let user = format!(
+            "【已有记忆】\n{}\n\n【最新对话】\n用户：{}\n助手：{}",
+            if old.trim().is_empty() { "（空）" } else { old.trim() },
+            user_text.chars().take(800).collect::<String>(),
+            reply.chars().take(800).collect::<String>()
+        );
+        let messages = vec![
+            llm::ChatMsg { role: "system".into(), content: sys.into() },
+            llm::ChatMsg { role: "user".into(), content: user },
+        ];
+        if let Ok(new_mem) =
+            llm::complete_once(&cfg.base_url, &cfg.api_key, &cfg.model, messages).await
+        {
+            let t = new_mem.trim();
+            if !t.is_empty() {
+                let capped: String = t.chars().take(1200).collect();
+                let _ = std::fs::write(memory_path(&app), capped);
+            }
+        }
+    });
+}
+
+// ---------- 汇率（免费接口 + 本地缓存 12h） ----------
+
+#[tauri::command]
+async fn get_fx(app: AppHandle, force: bool) -> Result<serde_json::Value, String> {
+    let dir = {
+        let d = app.state::<ConfigDir>();
+        d.0.clone()
+    };
+    let p = dir.join("fx.json");
+    if !force {
+        if let Ok(s) = std::fs::read_to_string(&p) {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
+                let t = v.get("t").and_then(|x| x.as_u64()).unwrap_or(0);
+                if now_millis() / 1000 - t < 12 * 3600 {
+                    return Ok(v);
+                }
+            }
+        }
+    }
+    let resp = reqwest::Client::new()
+        .get("https://open.er-api.com/v6/latest/USD")
+        .send()
+        .await
+        .map_err(|e| format!("汇率接口请求失败：{}", e))?;
+    let v: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let rates = v.get("rates").cloned().unwrap_or_else(|| serde_json::json!({}));
+    let out = serde_json::json!({ "t": now_millis() / 1000, "rates": rates });
+    let _ = std::fs::write(&p, out.to_string());
+    Ok(out)
+}
+
+// ---------- 屏幕录像（Windows 自带 Game Bar，Win+Alt+R 同款，零下载） ----------
+
+/// 模拟 Win+Alt+R：开始/停止系统自带录像
+fn send_gamebar_toggle() {
+    let script = r#"Add-Type -Name U -Namespace N -MemberDefinition '[DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);'; [N.U]::keybd_event(0x5B,0,0,[UIntPtr]::Zero); [N.U]::keybd_event(0x12,0,0,[UIntPtr]::Zero); [N.U]::keybd_event(0x52,0,0,[UIntPtr]::Zero); [N.U]::keybd_event(0x52,0,2,[UIntPtr]::Zero); [N.U]::keybd_event(0x12,0,2,[UIntPtr]::Zero); [N.U]::keybd_event(0x5B,0,2,[UIntPtr]::Zero);"#;
+    let _ = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-Command", script])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
+}
+
+fn stop_recorder(app: &AppHandle) {
+    let was = app.state::<RecFlag>().0.swap(false, Ordering::SeqCst);
+    if was {
+        send_gamebar_toggle();
+    }
+}
+
+#[tauri::command]
+async fn toggle_record(app: AppHandle) -> Result<serde_json::Value, String> {
+    let running = app.state::<RecFlag>().0.load(Ordering::SeqCst);
+    if running {
+        stop_recorder(&app);
+        return Ok(serde_json::json!({ "recording": false }));
+    }
+    // 先收成玩偶，避免把懒羊羊自己录进去；焦点落回你之前用的软件
+    enter_pet(&app);
+    std::thread::sleep(std::time::Duration::from_millis(400));
+    send_gamebar_toggle();
+    app.state::<RecFlag>().0.store(true, Ordering::SeqCst);
+    Ok(serde_json::json!({
+        "recording": true,
+        "note": "系统自带录像已开始，文件保存在「视频\\Captures」文件夹"
+    }))
+}
+
 #[tauri::command]
 fn quit_app(app: AppHandle) {
+    stop_recorder(&app);
     app.exit(0);
 }
 
@@ -515,12 +723,18 @@ async fn chat_send(app: AppHandle, session_id: i64, content: String) -> Result<i
         let conn = dbs.0.lock().unwrap();
         db::history_for_llm(&conn, sid, 20)
     };
+    let mut messages = Vec::new();
+    let memory = std::fs::read_to_string(memory_path(&app)).unwrap_or_default();
+    if let Some(sys) = build_system_prompt(&cfg, &memory) {
+        messages.push(llm::ChatMsg { role: "system".into(), content: sys });
+    }
+    messages.extend(history);
     let reply = llm::stream_completion(
         &app,
         &cfg.base_url,
         &cfg.api_key,
         &cfg.model,
-        history,
+        messages,
         "chat-token",
         "chat-done",
         "chat-error",
@@ -531,6 +745,9 @@ async fn chat_send(app: AppHandle, session_id: i64, content: String) -> Result<i
         let conn = dbs.0.lock().unwrap();
         db::add_message(&conn, sid, "assistant", &reply)
     };
+    if cfg.memory_enabled {
+        spawn_memory_update(app.clone(), cfg, content, reply);
+    }
     Ok(aid)
 }
 
@@ -636,6 +853,11 @@ pub fn run() {
             go_panel,
             go_pet,
             pet_peek,
+            toggle_expand,
+            get_memory,
+            clear_memory,
+            get_fx,
+            toggle_record,
             quit_app,
             take_screenshot,
             new_session,
@@ -665,7 +887,10 @@ pub fn run() {
                     let g = s.0.lock().unwrap();
                     g.auto_collapse
                 };
-                if auto && !is_pet(app) {
+                // 展开后 800ms 内的失焦事件忽略（前台切换尚未完成），避免刚展开就被收回
+                let stamp = app.state::<ShowStamp>().0.load(Ordering::SeqCst);
+                let grace = now_millis().saturating_sub(stamp) < 800;
+                if auto && !is_pet(app) && !grace {
                     enter_pet(app);
                 }
             }
@@ -691,6 +916,8 @@ pub fn run() {
             app.manage(ConfigState(Mutex::new(cfg.clone())));
             app.manage(ConfigDir(dir));
             app.manage(Mode(AtomicBool::new(false)));
+            app.manage(ShowStamp(AtomicU64::new(0)));
+            app.manage(RecFlag(AtomicBool::new(false)));
 
             disable_dwm_rounding(&handle);
             let _ = apply_autostart(&handle, cfg.autostart);
